@@ -1,0 +1,32 @@
+# Gemini API Configuration
+gemini_api_key: "your_gemini_api_key_here"
+
+# Shortcut Configuration
+# Set to true to require the key, false to not require it
+use_ctrl: true # Default: true (Ctrl key)
+use_shift: true # Default: true (Shift key)
+use_alt: false # Default: false (Alt key)
+
+# Trigger key (single character)
+# Supported keys: A-Z, 0-9
+trigger_key: "K" # Default: "K"
+
+# Exit Shortcut Configuration
+# Set to true to require the key, false to not require it
+exit_use_ctrl: true # Default: true (Ctrl key)
+exit_use_shift: true # Default: true (Shift key)
+exit_use_alt: false # Default: false (Alt key)
+
+# Exit trigger key (single character)
+# Supported keys: A-Z, 0-9
+exit_key: "Q" # Default: "Q"
+
+# Examples:
+# Ctrl+Shift+K (default): use_ctrl: true, use_shift: true, use_alt: false, trigger_key: "K"
+# Ctrl+Alt+S: use_ctrl: true, use_shift: false, use_alt: true, trigger_key: "S"
+# Shift+Alt+T: use_ctrl: false, use_shift: true, use_alt: true, trigger_key: "T"
+# Just F1: use_ctrl: false, use_shift: false, use_alt: false, trigger_key: "1"
+
+# Exit Examples:
+# Ctrl+Shift+Q (default): exit_use_ctrl: true, exit_use_shift: true, exit_use_alt: false, exit_key: "Q"
+# Ctrl+Alt+X: exit_use_ctrl: true, exit_use_shift: false, exit_use_alt: true, exit_key: "X"
