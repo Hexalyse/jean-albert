@@ -1,20 +1,68 @@
 use anyhow::Result;
 use arboard::Clipboard;
 use enigo;
-use enigo::{Enigo, KeyboardControllable};
-use rdev::{Event, EventType, Key, listen};
+use enigo::KeyboardControllable;
+use rdev::{EventType, Key, listen};
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use std::process;
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use tokio;
-use tray_icon::{TrayIconBuilder, TrayIconEvent, menu::Menu, menu::MenuItem};
+use tray_icon::TrayIconBuilder;
 
 #[derive(Debug, Deserialize, Clone)]
 struct Config {
     gemini_api_key: String,
+    #[serde(default = "default_use_ctrl")]
+    use_ctrl: bool,
+    #[serde(default = "default_use_shift")]
+    use_shift: bool,
+    #[serde(default = "default_use_alt")]
+    use_alt: bool,
+    #[serde(default = "default_trigger_key")]
+    trigger_key: String,
+    #[serde(default = "default_exit_use_ctrl")]
+    exit_use_ctrl: bool,
+    #[serde(default = "default_exit_use_shift")]
+    exit_use_shift: bool,
+    #[serde(default = "default_exit_use_alt")]
+    exit_use_alt: bool,
+    #[serde(default = "default_exit_key")]
+    exit_key: String,
+}
+
+fn default_use_ctrl() -> bool {
+    true
+}
+
+fn default_use_shift() -> bool {
+    true
+}
+
+fn default_use_alt() -> bool {
+    false
+}
+
+fn default_trigger_key() -> String {
+    "P".to_string()
+}
+
+fn default_exit_use_ctrl() -> bool {
+    true
+}
+
+fn default_exit_use_shift() -> bool {
+    true
+}
+
+fn default_exit_use_alt() -> bool {
+    false
+}
+
+fn default_exit_key() -> String {
+    "Q".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -54,6 +102,7 @@ struct Candidate {
 struct KeyState {
     ctrl: bool,
     shift: bool,
+    alt: bool,
 }
 
 fn get_exe_dir() -> PathBuf {
@@ -64,28 +113,62 @@ fn get_exe_dir() -> PathBuf {
 }
 
 fn read_prompt(exe_dir: &PathBuf) -> Result<String> {
-    let prompt_path = exe_dir.join("prompt.txt");
-    match fs::read_to_string(&prompt_path) {
+    // Try working directory first
+    let working_dir = std::env::current_dir()?;
+    let prompt_path_working = working_dir.join("prompt.txt");
+
+    if let Ok(content) = fs::read_to_string(&prompt_path_working) {
+        println!("✅ Prompt loaded from: {}", prompt_path_working.display());
+        return Ok(content);
+    }
+
+    // Fall back to executable directory
+    let prompt_path_exe = exe_dir.join("prompt.txt");
+    match fs::read_to_string(&prompt_path_exe) {
         Ok(content) => {
-            println!("✅ Prompt loaded from: {}", prompt_path.display());
+            println!("✅ Prompt loaded from: {}", prompt_path_exe.display());
             Ok(content)
         }
         Err(e) => {
-            eprintln!("❌ Failed to read prompt.txt: {}", e);
+            eprintln!(
+                "❌ Failed to read prompt.txt from both working directory and executable directory: {}",
+                e
+            );
             Ok("Please process the following text:".to_string())
         }
     }
 }
 
 fn read_config(exe_dir: &PathBuf) -> Result<Config> {
-    let config_path = exe_dir.join("config.yaml");
-    let content = fs::read_to_string(&config_path)
-        .map_err(|e| anyhow::anyhow!("Failed to read config.yaml: {}", e))?;
+    // Try working directory first
+    let working_dir = std::env::current_dir()?;
+    let config_path_working = working_dir.join("config.yaml");
+
+    if let Ok(content) = fs::read_to_string(&config_path_working) {
+        match serde_yaml::from_str::<Config>(&content) {
+            Ok(config) => {
+                println!("✅ Config loaded from: {}", config_path_working.display());
+                return Ok(config);
+            }
+            Err(e) => {
+                eprintln!("⚠️  Invalid config.yaml format in working directory: {}", e);
+            }
+        }
+    }
+
+    // Fall back to executable directory
+    let config_path_exe = exe_dir.join("config.yaml");
+    let content = fs::read_to_string(&config_path_exe).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read config.yaml from both working directory and executable directory: {}",
+            e
+        )
+    })?;
 
     let config: Config = serde_yaml::from_str(&content)
         .map_err(|e| anyhow::anyhow!("Invalid config.yaml format: {}", e))?;
 
-    println!("✅ Config loaded from: {}", config_path.display());
+    println!("✅ Config loaded from: {}", config_path_exe.display());
     Ok(config)
 }
 
@@ -108,7 +191,7 @@ async fn call_gemini_api(api_key: &str, prompt: &str, selected_text: &str) -> Re
 
     let client = reqwest::Client::new();
     let response = client
-        .post("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent")
+        .post("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite-preview-06-17:generateContent")
         .query(&[("key", api_key)])
         .json(&request)
         .send()
@@ -131,21 +214,54 @@ async fn call_gemini_api(api_key: &str, prompt: &str, selected_text: &str) -> Re
     Ok("No response from Gemini".to_string())
 }
 
-fn setup_tray() {
-    let menu = Menu::new();
-    let exit_item = MenuItem::new("Exit", true, None);
-    menu.append(&exit_item);
-    let _tray_icon = TrayIconBuilder::new()
-        .with_menu(Box::new(menu))
-        .with_tooltip("Gemini Text Processor\nPress Ctrl+Shift+P to process selected text")
+fn setup_tray(config: &Config) -> Result<tray_icon::TrayIcon> {
+    let shortcut_text = build_shortcut_text(config);
+    let exit_shortcut_text = build_exit_shortcut_text(config);
+    
+    // Create the tray icon without menu
+    let tray_icon = TrayIconBuilder::new()
+        .with_tooltip(format!("Press {} to process text\nPress {} to exit", shortcut_text, exit_shortcut_text))
         .build()
-        .unwrap();
+        .map_err(|e| anyhow::anyhow!("Failed to create tray icon: {}", e))?;
+    
+    Ok(tray_icon)
 }
 
-fn handle_hotkey<F: Fn(String) + Send + 'static>(callback: F) {
+fn build_shortcut_text(config: &Config) -> String {
+    let mut parts = Vec::new();
+    if config.use_ctrl {
+        parts.push("Ctrl".to_string());
+    }
+    if config.use_shift {
+        parts.push("Shift".to_string());
+    }
+    if config.use_alt {
+        parts.push("Alt".to_string());
+    }
+    parts.push(config.trigger_key.clone());
+    parts.join("+")
+}
+
+fn build_exit_shortcut_text(config: &Config) -> String {
+    let mut parts = Vec::new();
+    if config.exit_use_ctrl {
+        parts.push("Ctrl".to_string());
+    }
+    if config.exit_use_shift {
+        parts.push("Shift".to_string());
+    }
+    if config.exit_use_alt {
+        parts.push("Alt".to_string());
+    }
+    parts.push(config.exit_key.clone());
+    parts.join("+")
+}
+
+fn handle_hotkey(sender: mpsc::Sender<String>, config: Config) {
     let key_state = Arc::new(Mutex::new(KeyState {
         ctrl: false,
         shift: false,
+        alt: false,
     }));
 
     std::thread::spawn(move || {
@@ -161,26 +277,58 @@ fn handle_hotkey<F: Fn(String) + Send + 'static>(callback: F) {
                         Key::ShiftLeft | Key::ShiftRight => {
                             state.shift = true;
                         }
-                        Key::KeyP => {
-                            if state.ctrl && state.shift {
-                                println!("🔥 Hotkey pressed! Processing selected text...");
-                                // Get selected text from clipboard
-                                if let Ok(mut clipboard) = Clipboard::new() {
-                                    if let Ok(selected_text) = clipboard.get_text() {
-                                        if !selected_text.trim().is_empty() {
-                                            callback(selected_text);
+                        Key::Alt | Key::AltGr => {
+                            state.alt = true;
+                        }
+                        _ => {
+                            // Check if this is the trigger key
+                            if let Some(trigger_key) = parse_trigger_key(&config.trigger_key) {
+                                if key == trigger_key {
+                                    let ctrl_pressed = !config.use_ctrl || state.ctrl;
+                                    let shift_pressed = !config.use_shift || state.shift;
+                                    let alt_pressed = !config.use_alt || state.alt;
+                                    
+                                    if ctrl_pressed && shift_pressed && alt_pressed {
+                                        println!("🔥 Hotkey pressed! Processing selected text...");
+                                        
+                                        // Get selected text from clipboard
+                                        if let Ok(mut clipboard) = Clipboard::new() {
+                                            if let Ok(selected_text) = clipboard.get_text() {
+                                                if !selected_text.trim().is_empty() {
+                                                    println!("📝 Processing text: {}", selected_text);
+                                                    if let Err(e) = sender.send(selected_text) {
+                                                        eprintln!(
+                                                            "❌ Failed to send text to main thread: {}",
+                                                            e
+                                                        );
+                                                    }
+                                                } else {
+                                                    println!("⚠️  No text selected or clipboard is empty");
+                                                }
+                                            } else {
+                                                println!("❌ Failed to read clipboard");
+                                            }
                                         } else {
-                                            println!("⚠️  No text selected or clipboard is empty");
+                                            println!("❌ Failed to access clipboard");
                                         }
-                                    } else {
-                                        println!("❌ Failed to read clipboard");
                                     }
-                                } else {
-                                    println!("❌ Failed to access clipboard");
+                                }
+                            }
+                            
+                            // Check for exit shortcut
+                            if let Some(exit_key) = parse_trigger_key(&config.exit_key) {
+                                if key == exit_key {
+                                    let ctrl_pressed = !config.exit_use_ctrl || state.ctrl;
+                                    let shift_pressed = !config.exit_use_shift || state.shift;
+                                    let alt_pressed = !config.exit_use_alt || state.alt;
+                                    
+                                    if ctrl_pressed && shift_pressed && alt_pressed {
+                                        println!("👋 Exit shortcut pressed. Shutting down...");
+                                        std::process::exit(0);
+                                    }
                                 }
                             }
                         }
-                        _ => {}
                     }
                 }
                 EventType::KeyRelease(key) => match key {
@@ -189,6 +337,9 @@ fn handle_hotkey<F: Fn(String) + Send + 'static>(callback: F) {
                     }
                     Key::ShiftLeft | Key::ShiftRight => {
                         state.shift = false;
+                    }
+                    Key::Alt | Key::AltGr => {
+                        state.alt = false;
                     }
                     _ => {}
                 },
@@ -199,9 +350,49 @@ fn handle_hotkey<F: Fn(String) + Send + 'static>(callback: F) {
     });
 }
 
-async fn process_text(prompt: String, config: Config, selected_text: String) {
-    println!("📝 Processing text: {}", selected_text);
+fn parse_trigger_key(key_str: &str) -> Option<Key> {
+    match key_str.to_uppercase().as_str() {
+        "A" => Some(Key::KeyA),
+        "B" => Some(Key::KeyB),
+        "C" => Some(Key::KeyC),
+        "D" => Some(Key::KeyD),
+        "E" => Some(Key::KeyE),
+        "F" => Some(Key::KeyF),
+        "G" => Some(Key::KeyG),
+        "H" => Some(Key::KeyH),
+        "I" => Some(Key::KeyI),
+        "J" => Some(Key::KeyJ),
+        "K" => Some(Key::KeyK),
+        "L" => Some(Key::KeyL),
+        "M" => Some(Key::KeyM),
+        "N" => Some(Key::KeyN),
+        "O" => Some(Key::KeyO),
+        "P" => Some(Key::KeyP),
+        "Q" => Some(Key::KeyQ),
+        "R" => Some(Key::KeyR),
+        "S" => Some(Key::KeyS),
+        "T" => Some(Key::KeyT),
+        "U" => Some(Key::KeyU),
+        "V" => Some(Key::KeyV),
+        "W" => Some(Key::KeyW),
+        "X" => Some(Key::KeyX),
+        "Y" => Some(Key::KeyY),
+        "Z" => Some(Key::KeyZ),
+        "0" => Some(Key::Num0),
+        "1" => Some(Key::Num1),
+        "2" => Some(Key::Num2),
+        "3" => Some(Key::Num3),
+        "4" => Some(Key::Num4),
+        "5" => Some(Key::Num5),
+        "6" => Some(Key::Num6),
+        "7" => Some(Key::Num7),
+        "8" => Some(Key::Num8),
+        "9" => Some(Key::Num9),
+        _ => None,
+    }
+}
 
+async fn process_text(prompt: String, config: Config, selected_text: String) {
     match call_gemini_api(&config.gemini_api_key, &prompt, &selected_text).await {
         Ok(response) => {
             println!("📋 Gemini response: {}", response);
@@ -239,26 +430,44 @@ async fn main() -> Result<()> {
 
     println!("📄 Base prompt: {}", prompt);
 
-    setup_tray();
+    let _tray_icon = setup_tray(&config)?;
+    println!("✅ Tray icon created successfully");
 
     let prompt_clone = prompt.clone();
-    let config_clone = config.clone();
 
-    handle_hotkey(move |selected_text| {
-        let prompt = prompt_clone.clone();
-        let config = config_clone.clone();
+    // Create channel for communication between hotkey thread and main async runtime
+    let (sender, receiver) = mpsc::channel();
 
-        tokio::spawn(async move {
-            process_text(prompt, config, selected_text).await;
-        });
-    });
+    handle_hotkey(sender, config.clone());
 
     println!("✅ Application started successfully!");
-    println!("📌 Press Ctrl+Shift+P to process selected text");
+    let shortcut_text = build_shortcut_text(&config);
+    let exit_shortcut_text = build_exit_shortcut_text(&config);
+    println!("📌 Press {} to process selected text", shortcut_text);
+    println!("📌 Press {} to exit the application", exit_shortcut_text);
     println!("🖥️  Check the system tray for the application icon");
 
-    // Keep running
+    // Main loop to handle incoming text from hotkey
     loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+        // Check for hotkey events
+        match receiver.recv_timeout(std::time::Duration::from_millis(100)) {
+            Ok(selected_text) => {
+                let prompt = prompt_clone.clone();
+                let config = config.clone();
+
+                tokio::spawn(async move {
+                    process_text(prompt, config, selected_text).await;
+                });
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                // Continue loop
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                eprintln!("❌ Hotkey thread disconnected");
+                break;
+            }
+        }
     }
+
+    Ok(())
 }

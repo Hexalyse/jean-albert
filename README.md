@@ -5,7 +5,7 @@ A cross-platform Rust application that processes selected text using Google's Ge
 ## Features
 
 - **System Tray Icon**: Runs in the background with a tray icon
-- **Global Hotkey**: Press `Ctrl+Shift+P` to process selected text
+- **Configurable Global Hotkey**: Customize the shortcut (default: `Ctrl+Shift+P`)
 - **Gemini AI Integration**: Uses Google's Gemini 2.0 Flash-Lite model
 - **Cross-Platform**: Works on Windows, macOS, and Linux
 - **Automatic Text Replacement**: Replaces selected text with AI response
@@ -23,7 +23,20 @@ A cross-platform Rust application that processes selected text using Google's Ge
 1. **Edit `config.yaml`**:
 
    ```yaml
+   # Gemini API Configuration
    gemini_api_key: "YOUR_ACTUAL_API_KEY_HERE"
+
+   # Shortcut Configuration (optional - defaults shown)
+   use_ctrl: true # Require Ctrl key (default: true)
+   use_shift: true # Require Shift key (default: true)
+   use_alt: false # Require Alt key (default: false)
+   trigger_key: "P" # Trigger key (default: "P")
+
+   # Examples:
+   # Ctrl+Shift+P (default): use_ctrl: true, use_shift: true, use_alt: false, trigger_key: "P"
+   # Ctrl+Alt+S: use_ctrl: true, use_shift: false, use_alt: true, trigger_key: "S"
+   # Shift+Alt+T: use_ctrl: false, use_shift: true, use_alt: true, trigger_key: "T"
+   # Just F1: use_ctrl: false, use_shift: false, use_alt: false, trigger_key: "1"
    ```
 
 2. **Edit `prompt.txt`** (optional):
@@ -47,12 +60,12 @@ The executable will be created in `target/release/` directory.
 1. **Start the application**: Run the executable
 2. **Look for the tray icon**: The application will appear in your system tray
 3. **Select text**: Select any text in any application
-4. **Process text**: Press `Ctrl+Shift+P`
+4. **Process text**: Press your configured shortcut (default: `Ctrl+Shift+P`)
 5. **Wait for response**: The AI will process your text and replace the selection
 
 ## How It Works
 
-1. When you press `Ctrl+Shift+P`, the application:
+1. When you press your configured shortcut, the application:
    - Reads the currently selected text from the clipboard
    - Combines it with the prompt from `prompt.txt`
    - Sends the combined text to the Gemini API
@@ -65,7 +78,7 @@ The executable will be created in `target/release/` directory.
 jean-albert/
 ├── src/
 │   └── main.rs          # Main application code
-├── config.yaml          # Configuration file with API key
+├── config.yaml          # Configuration file with API key and shortcut settings
 ├── prompt.txt           # Base prompt for AI processing
 ├── Cargo.toml           # Rust dependencies
 └── README.md           # This file
@@ -86,7 +99,7 @@ jean-albert/
 ### Common Issues
 
 1. **API Key Error**: Make sure your `config.yaml` contains a valid Gemini API key
-2. **Hotkey Not Working**: Ensure no other application is using `Ctrl+Shift+P`
+2. **Hotkey Not Working**: Ensure no other application is using your configured shortcut
 3. **Clipboard Issues**: Some applications may not allow clipboard access
 4. **Text Not Replaced**: The automatic paste may not work in all applications
 
@@ -101,7 +114,7 @@ jean-albert/
 To modify the application:
 
 1. Edit the prompt in `prompt.txt`
-2. Modify the hotkey in `src/main.rs` (search for `Key::KeyP`)
+2. Modify the shortcut configuration in `config.yaml`
 3. Adjust AI parameters in the `GenerationConfig` struct
 4. Rebuild with `cargo build --release`
 

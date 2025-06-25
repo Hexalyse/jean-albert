@@ -1,1 +1,3 @@
-Please process the following text and provide a helpful response. If the text appears to be a question, answer it. If it's a statement, provide relevant insights or suggestions. 
+Merci de réécrire le message suivant, en le rendant plus diplomatique et compatible avec un milieu professionnel. Evite tout ce qui peut etre percu comme confrontationnel. Retourne UNIQUEENT le message réécrit, et aucune autre note, précision, ou explication sur la réécriture. Ta réponse doit pouvoir remplacer directement le message original.
+
+Voici le message à réécrire:
