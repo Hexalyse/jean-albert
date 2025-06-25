@@ -1,11 +1,14 @@
-# Gemini Text Processor
+# Jean-Albert
 
 A cross-platform Rust application that processes selected text using Google's Gemini AI API. The application runs in the system tray and allows you to process any selected text with a global hotkey.
+
+The initial goal of this application was to automate the transformation of messages into more "corporate" and "politically correct" when using instant messaging applications.
 
 ## Features
 
 - **System Tray Icon**: Runs in the background with a tray icon
-- **Configurable Global Hotkey**: Customize the shortcut (default: `Ctrl+Shift+P`)
+- **Configurable Global Hotkey**: Customize the shortcut (default: `Ctrl+Shift+K`)
+- **Configurable Exit Shortcut**: Customize the exit shortcut (default: `Ctrl+Shift+Q`)
 - **Gemini AI Integration**: Uses Google's Gemini 2.0 Flash-Lite model
 - **Cross-Platform**: Works on Windows, macOS, and Linux
 - **Automatic Text Replacement**: Replaces selected text with AI response
@@ -30,13 +33,23 @@ A cross-platform Rust application that processes selected text using Google's Ge
    use_ctrl: true # Require Ctrl key (default: true)
    use_shift: true # Require Shift key (default: true)
    use_alt: false # Require Alt key (default: false)
-   trigger_key: "P" # Trigger key (default: "P")
+   trigger_key: "K" # Trigger key (default: "K")
+
+   # Exit Shortcut Configuration (optional - defaults shown)
+   exit_use_ctrl: true # Require Ctrl key for exit (default: true)
+   exit_use_shift: true # Require Shift key for exit (default: true)
+   exit_use_alt: false # Require Alt key for exit (default: false)
+   exit_key: "Q" # Exit trigger key (default: "Q")
 
    # Examples:
-   # Ctrl+Shift+P (default): use_ctrl: true, use_shift: true, use_alt: false, trigger_key: "P"
+   # Ctrl+Shift+K (default): use_ctrl: true, use_shift: true, use_alt: false, trigger_key: "K"
    # Ctrl+Alt+S: use_ctrl: true, use_shift: false, use_alt: true, trigger_key: "S"
    # Shift+Alt+T: use_ctrl: false, use_shift: true, use_alt: true, trigger_key: "T"
    # Just F1: use_ctrl: false, use_shift: false, use_alt: false, trigger_key: "1"
+
+   # Exit Examples:
+   # Ctrl+Shift+Q (default): exit_use_ctrl: true, exit_use_shift: true, exit_use_alt: false, exit_key: "Q"
+   # Ctrl+Alt+X: exit_use_ctrl: true, exit_use_shift: false, exit_use_alt: true, exit_key: "X"
    ```
 
 2. **Edit `prompt.txt`** (optional):
@@ -60,8 +73,9 @@ The executable will be created in `target/release/` directory.
 1. **Start the application**: Run the executable
 2. **Look for the tray icon**: The application will appear in your system tray
 3. **Select text**: Select any text in any application
-4. **Process text**: Press your configured shortcut (default: `Ctrl+Shift+P`)
+4. **Process text**: Press your configured shortcut (default: `Ctrl+Shift+K`)
 5. **Wait for response**: The AI will process your text and replace the selection
+6. **Exit application**: Press your configured exit shortcut (default: `Ctrl+Shift+Q`)
 
 ## How It Works
 

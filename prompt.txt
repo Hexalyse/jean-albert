@@ -1,3 +1,5 @@
-Merci de réécrire le message suivant, en le rendant plus diplomatique et compatible avec un milieu professionnel. Evite tout ce qui peut etre percu comme confrontationnel. Retourne UNIQUEENT le message réécrit, et aucune autre note, précision, ou explication sur la réécriture. Ta réponse doit pouvoir remplacer directement le message original.
+Merci de réécrire le message suivant, en le rendant plus diplomatique et compatible avec un milieu professionnel. Evite tout ce qui peut etre percu comme confrontationnel.
+
+Format de réponse: Retourne UNIQUEMENT le message réécrit, et aucune autre note, précision, ou explication sur la réécriture, aucune introduction avant de mentionner le message réécrit (du style "Je comprends votre souhait d'améliorer la communication. Voici une proposition"). Evite a tout prix tout ca. Ta réponse doit pouvoir remplacer directement le message original.
 
 Voici le message à réécrire:
